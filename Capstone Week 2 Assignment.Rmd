@@ -1,0 +1,169 @@
+---
+title: "Capstone Week 2 Assignment Doc"
+author: "Jonathan Marin"
+date: "October 29, 2017"
+output: html_document
+
+      
+---
+
+
+#Load the Data
+
+The blog, news, and twitter data was downloaded from the following link and loaded to my working directory:
+
+https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip
+
+The following code loads the packages and sets the working directory to where the data is sitting. 
+
+```{r setup, include=FALSE}
+library(tm)
+library(rJava)
+library(RWeka)
+library(dplyr)
+library(ggplot2)
+library(SnowballC)
+library(wordcloud)
+
+
+setwd("C:/Users/Marin Family/Desktop/New folder/Coursera-SwiftKey/final/en_US")
+
+
+
+```
+
+# Reading the Data
+
+We now read the data into R
+
+```{r read}
+blogs <- readLines("./en_us.blogs.txt", encoding = "UTF-8", skipNul = TRUE)
+news <- readLines("./en_us.news.txt", encoding = "UTF-8", skipNul = TRUE)
+twitter <- readLines("./en_us.twitter.txt" , encoding = "UTF-8", skipNul = TRUE)
+
+
+```
+
+# Summary Stats
+The following is some detailed summary stats on the data that was loaded in. 
+
+
+```{r summary, echo=TRUE}
+
+summary <- data.frame('File' = c("Blogs","News","Twitter"),
+                      "File Size" = sapply(list(blogs, news, twitter), function(x){format(object.size(x),"MB")}),
+                      'Entries' = sapply(list(blogs, news, twitter), function(x){length(x)}),
+                      'Total Characters' = sapply(list(blogs, news, twitter), function(x){sum(nchar(x))}),
+                      'Max Characters' = sapply(list(blogs, news, twitter), function(x){max(unlist(lapply(x, function(y) nchar(y))))})
+                      )
+summary
+
+
+```
+
+#Combining and Sampling the Data
+
+We are setting the seed for reproducability and taking a 1% sample for faster processing and performance. 
+
+```{r}
+
+
+
+set.seed(1234)
+sample <- c(sample(blogs, length(blogs) * 0.01),
+                 sample(news, length(news) * 0.01),
+                 sample(twitter, length(twitter) * 0.01))
+
+
+```
+
+##Cleaning the Data
+
+I am now removing puncation, white space, numbers, plain text, stopwords, stem words, converting to lower case, and removing bad words. 
+
+```{r}
+
+
+corpus <- VCorpus(VectorSource(sample))
+
+corpus <- Corpus(VectorSource(sapply(corpus, function(row) iconv(row, "latin1", "ASCII", sub=""))))
+
+corpus <- tm_map(corpus, removePunctuation) # Remove punctuation
+corpus <- tm_map(corpus, stripWhitespace) # Remove unneccesary white spaces
+corpus <- tm_map(corpus, removeNumbers) # Remove numbers
+corpus <- tm_map(corpus, PlainTextDocument) # Plain text
+corpus <- tm_map(corpus, removeWords, stopwords("english"))
+corpus <- tm_map(corpus, stemDocument)  #Removing stem words. 
+corpus <- tm_map(corpus, (tolower)) # Convert to lowercase
+corpus <- tm_map(corpus, PlainTextDocument)
+
+
+#Need to find a list of bad words to filter this out of the corpus.  Googled "list of bad words to filter english" and found this link.  https://www.frontgatemedia.com/a-list-of-723-bad-words-to-blacklist-and-how-to-use-facebooks-moderation-tool/
+
+badwordsURL <- 'https://www.frontgatemedia.com/new/wp-content/uploads/2014/03/Terms-to-Block.csv'
+
+badWords <- readLines(badwordsURL)
+
+corpus <- tm_map(corpus, removeWords, badWords)
+
+```
+
+
+#Tokenize and Calculate Frequencies of N-Grams
+
+Here is where we tokenize the data. 
+
+```{r}
+
+
+#Tokenizing for the unigrams
+
+
+unigram <-NGramTokenizer(corpus, Weka_control(min = 1, max = 1))
+
+
+#Tokenizing for the bigrams
+bigram<- NGramTokenizer(corpus, Weka_control(min = 2, max = 2))
+
+#Tokenizing for the trigrams
+trigram<- NGramTokenizer(corpus, Weka_control(min = 3, max = 3))
+
+
+
+
+```
+
+
+#Frequency Histograms of Unigrams, BiGrams, and Trigrams
+
+
+```{r}
+unigram_freq <- data.frame(table(unigram))
+unigram_ord <- unigram_freq[order(unigram_freq$Freq,decreasing = TRUE),]
+unigram_top<-head(unigram_ord,25)
+barplot(unigram_top$Freq, names.arg = unigram_top$unigram, border=NA, las=2, main="25 Most Frequent Unigrams", cex.main=1, col = "blue")
+
+
+```
+
+
+```{r}
+
+bigram_freq <- data.frame(table(bigram))
+bigram_ord <- bigram_freq[order(bigram_freq$Freq,decreasing = TRUE),]
+bigram_top<-head(bigram_ord,25)
+barplot(bigram_top$Freq, names.arg = bigram_top$bigram, border=NA, las=2, main="25 Most Frequent Bigrams", cex.main=1, col = "blue")
+
+```
+
+```{r}
+trigram_freq <- data.frame(table(trigram))
+trigram_ord <- trigram_freq[order(trigram_freq$Freq,decreasing = TRUE),]
+trigram_top<-head(trigram_ord,10)
+barplot(trigram_top$Freq, names.arg = trigram_top$trigram, border=NA, las=2, main="10 Most Frequent Tri-grams", cex.main=2, cex.names = .6, col = "blue")
+
+```
+
+#Next Step
+
+I will need to build a R shiny app that will predict the next word after the user enters any word of their choosing.  Within the app, I will need a model that will have stored frequency histograms of the n-grams to find the next word or words. 
